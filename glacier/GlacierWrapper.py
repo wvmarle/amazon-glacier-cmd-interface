@@ -859,10 +859,10 @@ using %s MB parts to upload."% part_size)
         :raises:
         """
 
-        # Switch off debug logging for boto, as otherwise it's
-        # filling up the log with the data sent!
-        if self.logger.getEffectiveLevel() == 10:
-            logging.getLogger('boto').setLevel(logging.INFO)
+##        # Switch off debug logging for boto, as otherwise it's
+##        # filling up the log with the data sent!
+##        if self.logger.getEffectiveLevel() == 10:
+##            logging.getLogger('boto').setLevel(logging.INFO)
 
         # Do some sanity checking on the user values.
         self._check_vault_name(vault_name)
