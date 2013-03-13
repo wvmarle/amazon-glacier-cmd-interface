@@ -265,11 +265,9 @@ aws:
  --aws-access-key AWS_ACCESS_KEY
                        Your aws access key (Required if you have not created
                        a ~/.glacier-cmd or /etc/glacier-cmd.conf config file)
-                       (default: AKIAIP5VPUSCSJQ6BSSQ)
  --aws-secret-key AWS_SECRET_KEY
                        Your aws secret key (Required if you have not created
                        a ~/.glacier-cmd or /etc/glacier-cmd.conf config file)
-                       (default: WDgq6ZZn7Y4Lkt5LxPuionw2pTLbonwdFZz1BGtS)
 
 glacier:
  --region REGION       Region where you want to store your archives (Required

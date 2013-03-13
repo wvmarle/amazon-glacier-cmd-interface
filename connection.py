@@ -784,11 +784,15 @@ class AWSAuthConnection(object):
         Google group by Larry Bates.  Thanks!
 
         """
+        from hashlib import sha256
         boto.log.debug('Method: %s' % request.method)
         boto.log.debug('Path: %s' % request.path)
 ##        boto.log.debug('Data: %s' % request.body)
+        boto.log.debug('Data hash: %s' % sha256(request.body).hexdigest())
         boto.log.debug('Headers: %s' % request.headers)
         boto.log.debug('Host: %s' % request.host)
+        if hasattr(request.body, 'tell'):
+            print 'File seek position, starting connection: %s.'% request.body.tell()
         response = None
         body = None
         e = None
@@ -801,78 +805,93 @@ class AWSAuthConnection(object):
         while i <= num_retries:
             # Use binary exponential backoff to desynchronize client requests
             next_sleep = random.random() * (2 ** i)
-##            try:
-            # we now re-sign each request before it is retried
-            boto.log.debug('Token: %s' % self.provider.security_token)
-            request.authorize(connection=self)
-            if callable(sender):
-                response = sender(connection, request.method, request.path,
-                                  request.body, request.headers)
-            else:
-                connection.request(request.method, request.path,
-                                   request.body, request.headers)
-                response = connection.getresponse()
-            location = response.getheader('location')
-            # -- gross hack --
-            # httplib gets confused with chunked responses to HEAD requests
-            # so I have to fake it out
-            if request.method == 'HEAD' and getattr(response,
-                                                    'chunked', False):
-                response.chunked = 0
-            if callable(retry_handler):
-                status = retry_handler(response, i, next_sleep)
-                if status:
-                    msg, i, next_sleep = status
-                    if msg:
-                        boto.log.debug(msg)
-                    time.sleep(next_sleep)
+            try:
+                # we now re-sign each request before it is retried
+                boto.log.debug('Token: %s' % self.provider.security_token)
+                request.authorize(connection=self)
+                if callable(sender):
+                    response = sender(connection, request.method, request.path,
+                                      request.body, request.headers)
+                else:
+                    connection.request(request.method, request.path,
+                                       request.body, request.headers)
+                    response = connection.getresponse()
+                location = response.getheader('location')
+                # -- gross hack --
+                # httplib gets confused with chunked responses to HEAD requests
+                # so I have to fake it out
+                if request.method == 'HEAD' and getattr(response,
+                                                        'chunked', False):
+                    response.chunked = 0
+                if callable(retry_handler):
+                    status = retry_handler(response, i, next_sleep)
+                    if status:
+                        msg, i, next_sleep = status
+                        if msg:
+                            boto.log.debug(msg)
+                        time.sleep(next_sleep)
+                        continue
+                if response.status == 500 or response.status == 503:
+                    msg = 'Received %d response.  ' % response.status
+                    msg += 'Retrying in %3.1f seconds' % next_sleep
+                    boto.log.debug(msg)
+                    body = response.read()
+                elif response.status < 300 or response.status >= 400 or \
+                        not location:
+                    self.put_http_connection(request.host, self.is_secure,
+                                             connection)
+                    return response
+                else:
+                    scheme, request.host, request.path, \
+                        params, query, fragment = urlparse.urlparse(location)
+                    if query:
+                        request.path += '?' + query
+                    msg = 'Redirecting: %s' % scheme + '://'
+                    msg += request.host + request.path
+                    boto.log.debug(msg)
+                    connection = self.get_http_connection(request.host,
+                                                          scheme == 'https')
+                    response = None
                     continue
-            if response.status == 500 or response.status == 503:
-                msg = 'Received %d response.  ' % response.status
-                msg += 'Retrying in %3.1f seconds' % next_sleep
-                boto.log.debug(msg)
-                body = response.read()
-            elif response.status < 300 or response.status >= 400 or \
-                    not location:
-                self.put_http_connection(request.host, self.is_secure,
-                                         connection)
-                return response
-            else:
-                scheme, request.host, request.path, \
-                    params, query, fragment = urlparse.urlparse(location)
-                if query:
-                    request.path += '?' + query
-                msg = 'Redirecting: %s' % scheme + '://'
-                msg += request.host + request.path
-                boto.log.debug(msg)
-                connection = self.get_http_connection(request.host,
-                                                      scheme == 'https')
-                response = None
-                continue
-##            except self.http_exceptions, e:
-##                for unretryable in self.http_unretryable_exceptions:
-##                    if isinstance(e, unretryable):
-##                        boto.log.debug(
-##                            'encountered unretryable %s exception, re-raising' %
-##                            e.__class__.__name__)
-##                        raise e
-##                boto.log.debug('encountered %s exception, reconnecting' % \
+            except self.http_exceptions, e:
+                for unretryable in self.http_unretryable_exceptions:
+                    if isinstance(e, unretryable):
+                        boto.log.debug(
+                            'encountered unretryable %s exception, re-raising' %
+                            e.__class__.__name__)
+                        raise e
+                boto.log.debug('encountered %s exception, reconnecting' % \
 ##                                  e.__class__.__name__)
-##                connection = self.new_http_connection(request.host,
-##                                                      self.is_secure)
+                                    e)
+                boto.log.debug('Method: %s' % request.method)
+                boto.log.debug('Path: %s' % request.path)
+##                boto.log.debug('Data: %s' % request.body)
+                boto.log.debug('Data hash: %s' % sha256(request.body).hexdigest())
+                boto.log.debug('Headers: %s' % request.headers)
+                boto.log.debug('Host: %s' % request.host)
+                print 'new connection %s.' % sha256(request.body).hexdigest()
+                if hasattr(request.body, 'tell'):
+                    print 'File seek position, retrying connection: %s.'% request.body.tell()
+
+                if hasattr(request.body, 'seek'):
+                    request.body.seek(0)
+                    print 'File seek position corrected, now at: %s.'% request.body.tell()
+
+                connection = self.new_http_connection(request.host,
+                                                      self.is_secure)
             time.sleep(next_sleep)
             i += 1
         # If we made it here, it's because we have exhausted our retries
         # and stil haven't succeeded.  So, if we have a response object,
         # use it to raise an exception.
         # Otherwise, raise the exception that must have already h#appened.
-##        if response:
-##            raise BotoServerError(response.status, response.reason, body)
-##        elif e:
-##            raise e
-##        else:
-##            msg = 'Please report this exception as a Boto Issue!'
-##            raise BotoClientError(msg)
+        if response:
+            raise BotoServerError(response.status, response.reason, body)
+        elif e:
+            raise e
+        else:
+            msg = 'Please report this exception as a Boto Issue!'
+            raise BotoClientError(msg)
 
     def build_base_http_request(self, method, path, auth_path,
                                 params=None, headers=None, data='', host=None):

@@ -198,9 +198,11 @@ ap-northeast-1 (Asia-Pacific - Tokyo)"""
                                       self.aws_access_key,
                                       self.aws_secret_key,
                                       self.region)
+
                     self.glacierconn = GlacierConnection(self.aws_access_key,
                                                          self.aws_secret_key,
                                                          region_name=self.region)
+                    
                 except boto.exception.AWSConnectionError as e:
                     raise ConnectionException(
                         "Cannot connect to Amazon Glacier.",
@@ -1240,7 +1242,7 @@ using %s MB parts to upload."% part_size)
             for i in range(sessions):
                 p = multiprocessing.Process(
                     target=glaciercorecalls.upload_part_process,
-                    args=(q, child_conn, self.aws_access_key,
+                    args=(q, writer, child_conn, self.aws_access_key,
                           self.aws_secret_key, self.region, file_name,
                           vault_name, description, part_size_in_bytes,
                           writer.uploadid, self.logger))

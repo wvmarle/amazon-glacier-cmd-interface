@@ -69,7 +69,7 @@ def tree_hash(fo):
 def bytes_to_hex(str):
     return ''.join( [ "%02x" % ord( x ) for x in str] ).strip()
 
-def upload_part_process(q, conn, aws_access_key, aws_secret_key, region,
+def upload_part_process(q, writer, conn, aws_access_key, aws_secret_key, region,
                         file_name, vault_name, description,
                         part_size_in_bytes, uploadid, logger):
     """
@@ -93,9 +93,9 @@ Connecting to Amazon Glacier for worker process with
             "Cannot connect to Amazon Glacier.",
             cause=e.cause,
             code="GlacierConnectionError")
-    writer = GlacierWriter(glacierconn, vault_name, description=description,
-                           part_size_in_bytes=part_size_in_bytes,
-                           uploadid=uploadid, logger=logger)
+##    writer = GlacierWriter(glacierconn, vault_name, description=description,
+##                           part_size_in_bytes=part_size_in_bytes,
+##                           uploadid=uploadid, logger=logger)
     while True:
         try:
             item = q.get(False)
@@ -107,6 +107,7 @@ Connecting to Amazon Glacier for worker process with
                          length=stop-start,
                          offset=start,
                          access=mmap.ACCESS_READ)
+        
         logger.debug('Got to work on range %s-%s'% (start, stop))
         try:
             writer.write(part, start=start)
